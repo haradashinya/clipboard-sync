@@ -162,5 +162,4 @@ launchd plist の `EnvironmentVariables` セクションで設定します。
 ## スコープ外
 
 - Linux → Mac の逆方向同期
-- Finder でのファイルコピー（`public.file-url`）への対応
 - クリップボード履歴（直近の 1 件のみ同期）

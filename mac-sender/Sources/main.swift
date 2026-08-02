@@ -95,6 +95,22 @@ final class ClipboardSender {
             }
         }
 
+        // ファイルURL が画像ファイルを指している場合は画像データを送信
+        // UTI フィルタを使わず、実際に NSImage で開けるかどうかで判定する
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
+            for url in urls where url.isFileURL {
+                if let image = NSImage(contentsOf: url),
+                   let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                {
+                    let rep = NSBitmapImageRep(cgImage: cgImage)
+                    if let pngData = rep.representation(using: .png, properties: [:]) {
+                        send(data: pngData, contentType: "image/png")
+                        return
+                    }
+                }
+            }
+        }
+
         // テキスト
         if let text = pasteboard.string(forType: .string),
             let data = text.data(using: .utf8)
