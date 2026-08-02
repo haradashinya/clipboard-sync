@@ -1,0 +1,19 @@
+[Unit]
+Description=Clipboard Sync Receiver (Mac -> Linux)
+After=network.target graphical-session.target
+
+[Service]
+ExecStart=%h/bin/clipboard-receiver
+Restart=always
+RestartSec=5
+
+# Wayland セッションへのアクセスに必要
+# XDG_RUNTIME_DIR は systemd user service では自動設定される
+# WAYLAND_DISPLAY が見つからない場合は以下をアンコメントして調整
+# Environment=WAYLAND_DISPLAY=wayland-0
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
