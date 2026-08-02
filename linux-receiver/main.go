@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -32,8 +35,29 @@ func handleClipboard(w http.ResponseWriter, r *http.Request) {
 
 	var cmd *exec.Cmd
 	if strings.HasPrefix(contentType, "image/png") {
-		cmd = exec.Command("wl-copy", "--type", "image/png")
-		log.Printf("received image (%d bytes)", len(body))
+		// 画像をファイルに保存してファイルパスをクリップボードにセット
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			http.Error(w, "homedir error", http.StatusInternalServerError)
+			log.Printf("homedir error: %v", err)
+			return
+		}
+		dir := filepath.Join(homeDir, "Pictures", "clipboard-sync")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			http.Error(w, "mkdir error", http.StatusInternalServerError)
+			log.Printf("mkdir error: %v", err)
+			return
+		}
+		filename := fmt.Sprintf("clipboard-%s.png", time.Now().Format("2006-01-02-150405"))
+		filePath := filepath.Join(dir, filename)
+		if err := os.WriteFile(filePath, body, 0644); err != nil {
+			http.Error(w, "write error", http.StatusInternalServerError)
+			log.Printf("write error: %v", err)
+			return
+		}
+		log.Printf("received image (%d bytes) -> %s", len(body), filePath)
+		cmd = exec.Command("wl-copy")
+		cmd.Stdin = bytes.NewReader([]byte(filePath))
 	} else {
 		cmd = exec.Command("wl-copy")
 		preview := string(body)
@@ -41,9 +65,9 @@ func handleClipboard(w http.ResponseWriter, r *http.Request) {
 			preview = preview[:80] + "..."
 		}
 		log.Printf("received text: %q", preview)
+		cmd.Stdin = bytes.NewReader(body)
 	}
 
-	cmd.Stdin = bytes.NewReader(body)
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {

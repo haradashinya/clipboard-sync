@@ -115,16 +115,25 @@ final class ClipboardSender {
         if let text = pasteboard.string(forType: .string) {
             // クリップボードマネージャーが画像を一時ファイルに保存してパスを文字列で入れるケースに対応
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            fputs("[clipboard-sender] text detected: \(trimmed.prefix(120))\n", stderr)
             if trimmed.hasPrefix("/") {
                 let url = URL(fileURLWithPath: trimmed)
-                if let image = NSImage(contentsOf: url),
-                   let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
-                {
-                    let rep = NSBitmapImageRep(cgImage: cgImage)
-                    if let pngData = rep.representation(using: .png, properties: [:]) {
-                        send(data: pngData, contentType: "image/png")
-                        return
+                let exists = FileManager.default.fileExists(atPath: trimmed)
+                fputs("[clipboard-sender] file path detected, exists=\(exists)\n", stderr)
+                if let image = NSImage(contentsOf: url) {
+                    fputs("[clipboard-sender] NSImage loaded\n", stderr)
+                    if let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                        let rep = NSBitmapImageRep(cgImage: cgImage)
+                        if let pngData = rep.representation(using: .png, properties: [:]) {
+                            fputs("[clipboard-sender] sending as image/png (\(pngData.count) bytes)\n", stderr)
+                            send(data: pngData, contentType: "image/png")
+                            return
+                        }
+                    } else {
+                        fputs("[clipboard-sender] cgImage failed\n", stderr)
                     }
+                } else {
+                    fputs("[clipboard-sender] NSImage load failed\n", stderr)
                 }
             }
             if let data = text.data(using: .utf8) {
