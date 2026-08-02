@@ -112,10 +112,24 @@ final class ClipboardSender {
         }
 
         // テキスト
-        if let text = pasteboard.string(forType: .string),
-            let data = text.data(using: .utf8)
-        {
-            send(data: data, contentType: "text/plain; charset=utf-8")
+        if let text = pasteboard.string(forType: .string) {
+            // クリップボードマネージャーが画像を一時ファイルに保存してパスを文字列で入れるケースに対応
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("/") && FileManager.default.fileExists(atPath: trimmed) {
+                let url = URL(fileURLWithPath: trimmed)
+                if let image = NSImage(contentsOf: url),
+                   let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                {
+                    let rep = NSBitmapImageRep(cgImage: cgImage)
+                    if let pngData = rep.representation(using: .png, properties: [:]) {
+                        send(data: pngData, contentType: "image/png")
+                        return
+                    }
+                }
+            }
+            if let data = text.data(using: .utf8) {
+                send(data: data, contentType: "text/plain; charset=utf-8")
+            }
         }
     }
 
