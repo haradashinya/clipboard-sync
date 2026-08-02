@@ -115,7 +115,7 @@ final class ClipboardSender {
         if let text = pasteboard.string(forType: .string) {
             // クリップボードマネージャーが画像を一時ファイルに保存してパスを文字列で入れるケースに対応
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.hasPrefix("/") && FileManager.default.fileExists(atPath: trimmed) {
+            if trimmed.hasPrefix("/") {
                 let url = URL(fileURLWithPath: trimmed)
                 if let image = NSImage(contentsOf: url),
                    let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
