@@ -1,0 +1,20 @@
+ 8月 02 21:45:04 workstation clipboard-receiver[367943]: 2026/08/02 21:45:04 received image (90040 bytes) -> /home/furodrive/Pictures/clipboard-sync/clipboard-2026-08-02-214504.png
+ 8月 02 21:45:23 workstation clipboard-receiver[367943]: 2026/08/02 21:45:23 received text: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLI..."
+ 8月 02 21:48:07 workstation clipboard-receiver[367943]: 2026/08/02 21:48:07 received image (54172 bytes) -> /home/furodrive/Pictures/clipboard-sync/clipboard-2026-08-02-214807.png
+ 8月 02 21:48:13 workstation clipboard-receiver[367943]: 2026/08/02 21:48:13 received image (87375 bytes) -> /home/furodrive/Pictures/clipboard-sync/clipboard-2026-08-02-214813.png
+ 8月 02 21:48:16 workstation clipboard-receiver[367943]: 2026/08/02 21:48:16 received image (180982 bytes) -> /home/furodrive/Pictures/clipboard-sync/clipboard-2026-08-02-214816.png
+ 8月 02 21:48:19 workstation clipboard-receiver[367943]: 2026/08/02 21:48:19 received text: "❯ tail -f /tmp/clipboard-sync.err\ntail: 2\n[clipboard-sender] text detected: \xe2\x9d..."
+ 8月 02 21:48:35 workstation clipboard-receiver[367943]: 2026/08/02 21:48:35 received image (50035 bytes) -> /home/furodrive/Pictures/clipboard-sync/clipboard-2026-08-02-214835.png
+ 8月 02 21:49:12 workstation clipboard-receiver[367943]: 2026/08/02 21:49:12 received image (42711 bytes) -> /home/furodrive/Pictures/clipboard-sync/clipboard-2026-08-02-214912.png
+ 8月 02 21:49:19 workstation clipboard-receiver[367943]: 2026/08/02 21:49:19 received image (42711 bytes) -> /home/furodrive/Pictures/clipboard-sync/clipboard-2026-08-02-214919.png
+ 8月 02 21:49:50 workstation systemd[1643]: Stopping clipboard-sync.service - Clipboard Sync Receiver (Mac -> Linux)...
+ 8月 02 21:49:50 workstation systemd[1643]: Stopped clipboard-sync.service - Clipboard Sync Receiver (Mac -> Linux).
+ 8月 02 21:49:50 workstation systemd[1643]: Started clipboard-sync.service - Clipboard Sync Receiver (Mac -> Linux).
+ 8月 02 21:49:50 workstation clipboard-receiver[371655]: 2026/08/02 21:49:50 clipboard-receiver listening on :8765
+ 8月 02 21:49:52 workstation clipboard-receiver[371655]: 2026/08/02 21:49:52 received image (61573 bytes) -> /home/furodrive/Pictures/clipboard-sync/clipboard-2026-08-02-214952.png
+ 8月 02 21:50:16 workstation clipboard-receiver[371655]: 2026/08/02 21:50:16 received image (80727 bytes) -> /home/furodrive/Pictures/clipboard-sync/clipboard-2026-08-02-215016.png
+ 8月 02 21:50:19 workstation clipboard-receiver[371655]: 2026/08/02 21:50:19 received text: "[clipboard-sender] pasteboard types: [\"public.png\", \"Apple PNG pasteboard type\",..."
+ 8月 02 21:50:32 workstation clipboard-receiver[371655]: 2026/08/02 21:50:32 received text: "[clipboard-sender] pasteboard types: [\"public.png\", \"Apple PNG pasteboard type\",..."
+ 8月 02 21:50:47 workstation clipboard-receiver[371655]: 2026/08/02 21:50:47 received image (55138 bytes) -> /home/furodrive/Pictures/clipboard-sync/clipboard-2026-08-02-215047.png
+ 8月 02 21:51:03 workstation clipboard-receiver[371655]: 2026/08/02 21:51:03 received image (120709 bytes) -> /home/furodrive/Pictures/clipboard-sync/clipboard-2026-08-02-215103.png
+ 8月 02 21:51:12 workstation clipboard-receiver[371655]: 2026/08/02 21:51:12 received text: "$ /var/folders/xh/glbqq8bn4cb577d24jcvsbkc0000gn/T/clipboard-2026-08-02-215110-B..."

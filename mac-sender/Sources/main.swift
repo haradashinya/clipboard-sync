@@ -139,6 +139,11 @@ final class ClipboardSender {
                     fputs("[clipboard-sender] NSImage load failed\n", stderr)
                 }
             }
+            // /var/folders/ など macOS temp パスはテキストとして送信しない（クリップボードマネージャーの後処理）
+            if trimmed.hasPrefix("/var/folders/") || trimmed.hasPrefix("/private/var/folders/") {
+                fputs("[clipboard-sender] skipping macOS temp path as text\n", stderr)
+                return
+            }
             if let data = text.data(using: .utf8) {
                 send(data: data, contentType: "text/plain; charset=utf-8")
             }
