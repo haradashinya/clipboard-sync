@@ -1,0 +1,8 @@
+# launchd plist（個人設定を含むため）
+launchd/com.user.clipboard-sync.plist
+
+# Swift ビルド成果物
+mac-sender/.build/
+
+# Go ビルド成果物
+linux-receiver/clipboard-receiver
