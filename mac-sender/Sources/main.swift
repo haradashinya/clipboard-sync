@@ -77,6 +77,9 @@ final class ClipboardSender {
     }
 
     private func sendClipboard() {
+        let types = pasteboard.types?.map { $0.rawValue } ?? []
+        fputs("[clipboard-sender] pasteboard types: \(types)\n", stderr)
+
         // PNG を優先
         if let data = pasteboard.data(forType: .png) {
             send(data: data, contentType: "image/png")
