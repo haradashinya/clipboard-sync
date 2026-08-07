@@ -1,8 +1,8 @@
 # clipboard-sync
 
-Mac でコピーした内容（テキスト・画像）を、Tailscale 経由でリモートの Linux（Wayland）クリップボードに自動同期するツール。
+Mac と Linux（Wayland）の間で、コピーした内容（テキスト・画像）を Tailscale 経由で双方向に自動同期するツール。
 
-- **方向**: Mac → Linux の片方向のみ
+- **方向**: Mac ⇔ Linux の双方向
 - **ネットワーク**: Tailscale（追加の認証・暗号化設定は不要）
 - **対応コンテンツ**: テキスト、画像（PNG / TIFF）
 
@@ -18,11 +18,23 @@ systemd/           # Linux 自動起動設定
 ### 動作フロー
 
 ```
-[Mac] NSPasteboard をポーリング
-  → 変更を検知
-  → HTTP POST（テキスト or PNG バイナリ）
-    → [Linux] wl-copy でクリップボードにセット
+Mac -> Linux:
+  [Mac] NSPasteboard をポーリング
+    → 変更を検知
+    → HTTP POST（テキスト or PNG バイナリ）→ [Linux:8765]
+      → wl-copy でクリップボードにセット
+
+Linux -> Mac:
+  [Linux] wl-paste をポーリング
+    → 変更を検知
+    → HTTP POST（テキスト or PNG バイナリ）→ [Mac:8766]
+      → NSPasteboard にセット
 ```
+
+Mac 側・Linux 側とも「送信」と「受信」を同じプロセス（同じバイナリ）内で行う。
+相手から受信してクリップボードにセットした内容は、直後の自分のポーリングでは
+「自分がセットしたもの」として検知され、送り返さないようになっている
+（そうしないと Mac ⇔ Linux 間で無限にエコーし続けてしまう）。
 
 ## セットアップ
 
@@ -37,7 +49,7 @@ systemd/           # Linux 自動起動設定
 
 ---
 
-### Linux 側（受信サーバー）
+### Linux 側（送受信デーモン）
 
 **1. ビルド**
 
@@ -46,7 +58,13 @@ cd linux-receiver
 go build -o ~/bin/clipboard-receiver .
 ```
 
-**2. systemd user service として登録**
+**2. `systemd/clipboard-sync.service` を編集して Mac への送信先を設定**
+
+Linux → Mac 方向を有効にするには、`Environment=CLIPBOARD_SYNC_MAC_HOST=...` の行の
+コメントを外し、Mac の Tailscale IP に書き換える（`CLIPBOARD_SYNC_MAC_PORT` は
+Mac 側の待受ポートに合わせる。デフォルト `8766`）。
+
+**3. systemd user service として登録**
 
 ```bash
 mkdir -p ~/.config/systemd/user
@@ -55,7 +73,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now clipboard-sync
 ```
 
-**3. 動作確認**
+**4. 動作確認**
 
 ```bash
 systemctl --user status clipboard-sync
@@ -68,7 +86,7 @@ journalctl --user -u clipboard-sync -f
 
 ---
 
-### Mac 側（送信デーモン）
+### Mac 側（送受信デーモン）
 
 **1. ビルド**
 
@@ -104,26 +122,27 @@ tail -f /tmp/clipboard-sync.err
 
 ## 使い方
 
-登録後は自動的に起動します。Mac でテキストや画像をコピーすると、約 0.3 秒後に Linux のクリップボードに反映されます。
+登録後は自動的に起動します。どちらかでテキストや画像をコピーすると、約 0.3 秒後にもう一方のクリップボードに反映されます。
 
 ### 一時停止
 
-パスワードマネージャー等からコピーするときは、フラグファイルで送信を一時停止できます。
+パスワードマネージャー等からコピーするときは、フラグファイルで送信を一時停止できます（Mac / Linux 共通の仕組み。それぞれのマシン上で個別に効きます）。
 
 ```bash
 touch ~/.clipboard-sync-pause   # 停止
 rm ~/.clipboard-sync-pause      # 再開
 ```
 
-### 除外アプリ
+### 除外アプリ（Mac のみ）
 
-以下のアプリがフォアグラウンドにある間は自動的に送信をスキップします。
+以下のアプリがフォアグラウンドにある間は、Mac → Linux 方向の自動送信をスキップします。
 
 - 1Password
 - Keychain Access
 - Bitwarden
 
 追加したい場合は `mac-sender/Sources/main.swift` の `excludedApps` に追記してください。
+（Linux → Mac 方向には同等の仕組みはないため、除外したい場合は一時停止フラグを使ってください。）
 
 ---
 
@@ -133,26 +152,41 @@ rm ~/.clipboard-sync-pause      # 再開
 
 | 変数名 | デフォルト | 説明 |
 |---|---|---|
-| `CLIPBOARD_SYNC_HOST` | `localhost` | Linux 側のホスト名または IP |
-| `CLIPBOARD_SYNC_PORT` | `8765` | Linux 側のポート番号 |
+| `CLIPBOARD_SYNC_HOST` | `localhost` | 送信先（Linux）のホスト名または IP |
+| `CLIPBOARD_SYNC_PORT` | `8765` | 送信先（Linux）のポート番号 |
+| `CLIPBOARD_SYNC_LISTEN_PORT` | `8766` | Linux からの受信を待ち受けるポート番号 |
 
 launchd plist の `EnvironmentVariables` セクションで設定します。
 
-### ポート番号（Linux 側）
+### 環境変数（Linux 側）
 
-`linux-receiver/main.go` の `port` 定数を変更してください（デフォルト: `8765`）。
+| 変数名 | デフォルト | 説明 |
+|---|---|---|
+| `CLIPBOARD_SYNC_MAC_HOST` | （未設定） | 送信先（Mac）の Tailscale IP。未設定の場合 Linux → Mac 方向は無効になる |
+| `CLIPBOARD_SYNC_MAC_PORT` | `8766` | 送信先（Mac）のポート番号 |
+
+systemd service の `Environment=` 行で設定します。受信ポート（Mac → Linux、デフォルト `8765`）は
+`linux-receiver/main.go` の `port` 定数を変更してください。
 
 ---
 
 ## トラブルシューティング
 
-**Mac からの送信が届かない**
+**Mac → Linux の送信が届かない**
 - Linux 側で `systemctl --user status clipboard-sync` を確認
 - Tailscale の接続状態を確認（`tailscale status`）
 - Linux のファイアウォールでポート 8765 が開いているか確認
 
+**Linux → Mac の送信が届かない**
+- Mac 側で `tail -f /tmp/clipboard-sync.err` に `[clipboard-receiver] listening on port 8766` が出ているか確認
+- `launchd/com.user.clipboard-sync.plist` の `CLIPBOARD_SYNC_LISTEN_PORT` と、Linux 側の
+  `CLIPBOARD_SYNC_MAC_PORT` が一致しているか確認
+- macOS のファイアウォール（システム設定 > ネットワーク > ファイアウォール）で
+  ビルドしたバイナリへの受信接続がブロックされていないか確認
+- Linux 側で `journalctl --user -u clipboard-sync -f` を見て `forward to mac failed` が出ていないか確認
+
 **画像が貼り付けられない**
-- `wl-copy --version` で `wl-clipboard` のバージョンを確認
+- `wl-copy --version` / `wl-paste --version` で `wl-clipboard` のバージョンを確認
 - KDE Klipper との競合が疑われる場合、一度 Klipper を無効化して試す
 
 **`wl-copy: compositor doesn't support...` エラー**
@@ -161,5 +195,4 @@ launchd plist の `EnvironmentVariables` セクションで設定します。
 
 ## スコープ外
 
-- Linux → Mac の逆方向同期
 - クリップボード履歴（直近の 1 件のみ同期）

@@ -1,5 +1,5 @@
 [Unit]
-Description=Clipboard Sync Receiver (Mac -> Linux)
+Description=Clipboard Sync (Mac <-> Linux)
 After=network.target graphical-session.target
 
 [Service]
@@ -11,6 +11,10 @@ RestartSec=5
 # XDG_RUNTIME_DIR は systemd user service では自動設定される
 # WAYLAND_DISPLAY が見つからない場合は以下をアンコメントして調整
 # Environment=WAYLAND_DISPLAY=wayland-0
+
+# Linux -> Mac 方向の送信を有効にする場合に設定（Mac の Tailscale IP）
+# Environment=CLIPBOARD_SYNC_MAC_HOST=100.x.x.x
+# Environment=CLIPBOARD_SYNC_MAC_PORT=8766
 
 StandardOutput=journal
 StandardError=journal

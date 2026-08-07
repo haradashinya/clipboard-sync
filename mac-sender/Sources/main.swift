@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Network
 
 // MARK: - Configuration
 
@@ -8,6 +9,9 @@ struct Config {
     static let port = ProcessInfo.processInfo.environment["CLIPBOARD_SYNC_PORT"] ?? "8765"
     static let endpointURL = URL(string: "http://\(host):\(port)/clipboard")!
     static let pollInterval: TimeInterval = 0.3
+
+    // Linux 側からの受信を待ち受けるポート（Linux -> Mac）
+    static let listenPort = ProcessInfo.processInfo.environment["CLIPBOARD_SYNC_LISTEN_PORT"] ?? "8766"
 
     // touch このファイルで一時停止、rm で再開
     static let pauseFlagPath =
@@ -43,6 +47,13 @@ final class ClipboardSender {
         Timer.scheduledTimer(withTimeInterval: Config.pollInterval, repeats: true) { [weak self] _ in
             self?.poll()
         }
+    }
+
+    // Linux から受信してペーストボードに書き込んだ直後に呼ぶ。
+    // これを呼ばないと、直後の poll() が「ローカルでの変更」と誤認して Linux に送り返し、
+    // 無限ループ（Linux -> Mac -> Linux -> ...）になる。
+    func absorbExternalChange() {
+        lastChangeCount = pasteboard.changeCount
     }
 
     // MARK: - Private
@@ -169,8 +180,119 @@ final class ClipboardSender {
     }
 }
 
+// MARK: - ClipboardReceiver (Linux -> Mac)
+
+final class ClipboardReceiver {
+    private let pasteboard = NSPasteboard.general
+    private let sender: ClipboardSender
+    private var listener: NWListener?
+
+    init(sender: ClipboardSender) {
+        self.sender = sender
+    }
+
+    func start() {
+        guard let port = NWEndpoint.Port(Config.listenPort) else {
+            fputs("[clipboard-receiver] invalid port: \(Config.listenPort)\n", stderr)
+            return
+        }
+        do {
+            let listener = try NWListener(using: .tcp, on: port)
+            listener.newConnectionHandler = { [weak self] connection in
+                self?.accept(connection)
+            }
+            listener.start(queue: .main)
+            self.listener = listener
+            print("[clipboard-receiver] listening on port \(Config.listenPort)")
+        } catch {
+            fputs("[clipboard-receiver] failed to start listener: \(error)\n", stderr)
+        }
+    }
+
+    // MARK: - Private
+
+    private func accept(_ connection: NWConnection) {
+        connection.start(queue: .main)
+        receive(on: connection, buffer: Data())
+    }
+
+    private func receive(on connection: NWConnection, buffer: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            guard let self = self else { return }
+            var buf = buffer
+            if let data = data {
+                buf.append(data)
+            }
+
+            if let (bodyStart, headers) = Self.parseHeaders(buf) {
+                let contentLength = Self.contentLength(from: headers)
+                if buf.count - bodyStart >= contentLength {
+                    let body = buf.subdata(in: bodyStart..<(bodyStart + contentLength))
+                    let contentType = headers["content-type"] ?? "text/plain"
+                    self.applyClipboard(contentType: contentType, body: body)
+                    Self.respondOK(on: connection)
+                    return
+                }
+            }
+
+            if isComplete || error != nil {
+                connection.cancel()
+                return
+            }
+            self.receive(on: connection, buffer: buf)
+        }
+    }
+
+    private func applyClipboard(contentType: String, body: Data) {
+        pasteboard.clearContents()
+        if contentType.hasPrefix("image/png") {
+            if let image = NSImage(data: body) {
+                pasteboard.writeObjects([image])
+            } else {
+                pasteboard.setData(body, forType: .png)
+            }
+        } else if let text = String(data: body, encoding: .utf8) {
+            pasteboard.setString(text, forType: .string)
+        }
+        // pasteboard への書き込みは同期的に changeCount を更新するため、
+        // ここで即座に absorb すれば次の poll() で誤検知しない。
+        sender.absorbExternalChange()
+        fputs("[clipboard-receiver] applied clipboard from linux (\(body.count) bytes, \(contentType))\n", stderr)
+    }
+
+    private static func parseHeaders(_ data: Data) -> (bodyStart: Int, headers: [String: String])? {
+        let terminator = Data([0x0D, 0x0A, 0x0D, 0x0A]) // \r\n\r\n
+        guard let range = data.range(of: terminator) else { return nil }
+        guard let headerString = String(data: data.subdata(in: data.startIndex..<range.lowerBound), encoding: .utf8) else {
+            return nil
+        }
+        var headers: [String: String] = [:]
+        for line in headerString.components(separatedBy: "\r\n").dropFirst() {
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            let name = line[line.startIndex..<colon].trimmingCharacters(in: .whitespaces).lowercased()
+            let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            headers[name] = value
+        }
+        return (range.upperBound, headers)
+    }
+
+    private static func contentLength(from headers: [String: String]) -> Int {
+        guard let value = headers["content-length"], let length = Int(value) else { return 0 }
+        return length
+    }
+
+    private static func respondOK(on connection: NWConnection) {
+        let response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        connection.send(content: response.data(using: .utf8), completion: .contentProcessed { _ in
+            connection.cancel()
+        })
+    }
+}
+
 // MARK: - Entry point
 
 let sender = ClipboardSender()
+let receiver = ClipboardReceiver(sender: sender)
 sender.start()
+receiver.start()
 RunLoop.main.run()
