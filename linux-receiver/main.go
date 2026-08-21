@@ -46,6 +46,30 @@ var (
 	hasLastApplied  bool
 )
 
+// MARK: - wl-copy プロセス管理
+//
+// wl-copy はクリップボードのオーナーとして動き続けるため cmd.Run() は永遠にブロックする。
+// cmd.Start() で非同期起動し、次の wl-copy を起動するときに前のプロセスを終了させる。
+
+var (
+	activeWlCopyMu sync.Mutex
+	activeWlCopy   *exec.Cmd
+)
+
+func startWlCopy(cmd *exec.Cmd) error {
+	activeWlCopyMu.Lock()
+	defer activeWlCopyMu.Unlock()
+	if activeWlCopy != nil && activeWlCopy.Process != nil {
+		_ = activeWlCopy.Process.Kill()
+		_ = activeWlCopy.Wait()
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	activeWlCopy = cmd
+	return nil
+}
+
 func markApplied(data []byte) {
 	lastAppliedMu.Lock()
 	defer lastAppliedMu.Unlock()
@@ -131,7 +155,7 @@ func handleClipboard(w http.ResponseWriter, r *http.Request) {
 
 	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	if err := startWlCopy(cmd); err != nil {
 		http.Error(w, "wl-copy error", http.StatusInternalServerError)
 		log.Printf("wl-copy error: %v", err)
 		return
