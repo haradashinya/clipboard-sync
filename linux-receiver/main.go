@@ -13,12 +13,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/godbus/dbus/v5"
 )
 
 const (
-	port         = "8765"             // Mac -> Linux 受信ポート
-	maxBytes     = 50 * 1024 * 1024   // 50 MB
-	pollInterval = 300 * time.Millisecond
+	port     = "8765"           // Mac -> Linux 受信ポート
+	maxBytes = 50 * 1024 * 1024 // 50 MB
+	// Klipper のシグナルが使えないときだけ使うポーリング間隔。
+	// wl-paste はフォーカスを奪うので短くしすぎないこと。
+	fallbackPollInterval = 5 * time.Second
 )
 
 var (
@@ -241,9 +245,12 @@ func pollAndForward() {
 	var lastSeenHash [32]byte
 	hasLastSeen := false
 
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-	for range ticker.C {
+	// wl-paste は data-control プロトコルが使えない環境（wl-clipboard 2.2.1 + KWin 6）
+	// では、読み取りのたびに一瞬だけ見えないウィンドウを作ってフォーカスを奪う。
+	// 300ms ごとにポーリングすると右クリックメニュー等のポップアップが即座に閉じてしまう。
+	// そのため Klipper の clipboardHistoryUpdated シグナルを受けたときだけ読みに行く。
+	trigger := clipboardChanges()
+	for range trigger {
 		if isPaused() {
 			continue
 		}
@@ -271,6 +278,46 @@ func pollAndForward() {
 		}
 		log.Printf("forwarded clipboard to mac (%d bytes, %s)", len(data), contentType)
 	}
+}
+
+// clipboardChanges はクリップボードが変わった可能性があるタイミングを通知する。
+// Klipper の D-Bus シグナルが使えればそれを使い、使えなければ低頻度のポーリングに落とす。
+func clipboardChanges() <-chan struct{} {
+	ch := make(chan struct{}, 1)
+	notify := func() {
+		select {
+		case ch <- struct{}{}:
+		default: // 未処理の通知があればまとめる
+		}
+	}
+
+	conn, err := dbus.ConnectSessionBus()
+	if err == nil {
+		err = conn.AddMatchSignal(
+			dbus.WithMatchInterface("org.kde.klipper.klipper"),
+			dbus.WithMatchMember("clipboardHistoryUpdated"),
+		)
+	}
+	if err != nil {
+		log.Printf("klipper signal unavailable (%v); falling back to polling every %s", err, fallbackPollInterval)
+		go func() {
+			for range time.Tick(fallbackPollInterval) {
+				notify()
+			}
+		}()
+		return ch
+	}
+
+	log.Printf("watching klipper clipboardHistoryUpdated signal")
+	signals := make(chan *dbus.Signal, 16)
+	conn.Signal(signals)
+	go func() {
+		notify() // 起動時に現在の内容を一度読んで基準にする
+		for range signals {
+			notify()
+		}
+	}()
+	return ch
 }
 
 func main() {
