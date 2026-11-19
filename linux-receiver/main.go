@@ -172,15 +172,14 @@ func readClipboard() (contentType string, data []byte, err error) {
 	if err != nil {
 		return "", nil, err
 	}
-	hasImage := false
+	types := map[string]bool{}
 	for _, t := range strings.Split(strings.TrimSpace(string(typesOut)), "\n") {
-		if t == "image/png" {
-			hasImage = true
-			break
+		if t = strings.TrimSpace(t); t != "" {
+			types[t] = true
 		}
 	}
 
-	if hasImage {
+	if types["image/png"] {
 		data, err := exec.Command("wl-paste", "--no-newline", "--type", "image/png").Output()
 		if err != nil {
 			return "", nil, err
@@ -188,11 +187,28 @@ func readClipboard() (contentType string, data []byte, err error) {
 		return "image/png", data, nil
 	}
 
-	data, err = exec.Command("wl-paste", "--no-newline").Output()
+	// wl-paste を --type なしで呼ぶと、テキスト系の型が無いクリップボード
+	// （KDE 独自の MIME 型だけ等）で wl-clipboard 2.2.1 が assert で abort し、
+	// ポーリングのたびに大量のクラッシュレポートが出る。
+	// 型は必ず自分で選んで明示的に渡し、該当する型が無ければスキップする。
+	textType := pickTextType(types)
+	if textType == "" {
+		return "", nil, nil
+	}
+	data, err = exec.Command("wl-paste", "--no-newline", "--type", textType).Output()
 	if err != nil {
 		return "", nil, err
 	}
 	return "text/plain; charset=utf-8", data, nil
+}
+
+func pickTextType(types map[string]bool) string {
+	for _, t := range []string{"text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "TEXT", "STRING"} {
+		if types[t] {
+			return t
+		}
+	}
+	return ""
 }
 
 func forwardToMac(client *http.Client, endpoint, contentType string, data []byte) error {
